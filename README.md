@@ -7,7 +7,8 @@ off and on.
 
 - Turns whole monitors on and off, and sets resolution, refresh rate, position and the primary
   monitor.
-- Generates a starting config from the monitors you have (`ScreenLayout.exe init`).
+- Sets itself up in one command (`ScreenLayout.exe init`): it generates a config from the monitors
+  you have and starts with Windows.
 - Runs as a single small background process with no tray icon, no installer, and no .NET SDK.
 - Builds with the C# compiler that ships with every Windows 10/11, and needs nothing else.
 
@@ -28,7 +29,13 @@ Windows 10 or 11. The .NET Framework 4.x it uses is part of the OS.
 
 ## Setup
 
-### 1. Get and build it
+### 1. Get it
+
+**Download:** take `ScreenLayout-<version>.zip` from the
+[latest release](https://github.com/dabalroman/ScreenLayout/releases/latest) and extract it to a
+folder of your choice, e.g. `%LOCALAPPDATA%\ScreenLayout`.
+
+**Or build it from source:**
 
 ```powershell
 git clone https://github.com/dabalroman/ScreenLayout.git
@@ -36,10 +43,11 @@ cd ScreenLayout
 .\build.cmd
 ```
 
-This produces `ScreenLayout.exe` next to the sources. Keep the folder where it is: the exe reads
-and writes its files next to itself.
+This produces `ScreenLayout.exe` in the repository folder.
 
-### 2. Generate your layouts
+Either way, keep the folder where it is: the exe reads and writes its files next to itself.
+
+### 2. Run init
 
 Connect and switch on **all** your monitors, then run:
 
@@ -47,7 +55,15 @@ Connect and switch on **all** your monitors, then run:
 .\ScreenLayout.exe init
 ```
 
-This writes `layouts.ini` for the monitors it finds and opens it in Notepad. You get:
+This does the whole setup:
+
+1. It writes `layouts.ini` for the monitors it finds (see below).
+2. It adds a `ScreenLayout watcher` shortcut to your Startup folder, so the watcher starts with
+   Windows. The watcher owns the hotkeys and keeps the chosen layout applied.
+3. It starts the watcher.
+4. It opens `layouts.ini` in Notepad.
+
+The generated `layouts.ini` contains:
 
 - **All monitors**: the monitors that are on stay where they are now, and the others are placed to
   the right,
@@ -56,25 +72,16 @@ This writes `layouts.ini` for the monitors it finds and opens it in Notepad. You
 
 with hotkeys `Ctrl+Alt+1`, `Ctrl+Alt+2`, ... in that order. Rename the modes, fix the positions or
 refresh rates, and change the hotkeys as you like. The format is described [below](#layoutsini).
-`init` never overwrites an existing `layouts.ini`. To start over, delete the file and run `init`
-again.
-
-### 3. Start the watcher at logon
-
-The watcher owns the hotkeys and keeps the chosen layout applied. To start it with Windows, run
-this in PowerShell from the ScreenLayout folder:
-
-```powershell
-$exe = (Resolve-Path .\ScreenLayout.exe).Path
-$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\ScreenLayout.lnk")
-$lnk.TargetPath = $exe; $lnk.Arguments = 'watch'; $lnk.WorkingDirectory = Split-Path $exe; $lnk.Save()
-Start-Process $exe watch
-```
+Save the file and the watcher picks up the new hotkeys right away.
 
 Then press `Ctrl+Alt+1`. Each switch makes the screens flicker for a few seconds while Windows
 reconfigures them, which is normal.
 
-To uninstall, delete the `ScreenLayout.lnk` shortcut from the Startup folder
+`init` is safe to run again, e.g. after moving the folder: it never overwrites an existing
+`layouts.ini`, and it updates the shortcut to point at the exe's new location. To get a fresh
+`layouts.ini`, delete it and run `init`.
+
+To uninstall, delete the `ScreenLayout watcher` shortcut from the Startup folder
 (`shell:startup`), stop `ScreenLayout.exe` in Task Manager, and delete the folder.
 
 ## Usage
@@ -82,7 +89,7 @@ To uninstall, delete the `ScreenLayout.lnk` shortcut from the Startup folder
 ```
 ScreenLayout.exe set <mode>      switch to a mode (what the hotkeys run)
 ScreenLayout.exe watch           background watcher (one instance; started at logon)
-ScreenLayout.exe init            generate layouts.ini from the connected monitors
+ScreenLayout.exe init            setup: generate layouts.ini, add the Startup shortcut, start the watcher
 ScreenLayout.exe preview <mode>  show the toast without switching anything
 ScreenLayout.exe status          write the current monitor state to the log
 ```
@@ -123,9 +130,8 @@ IVM7628 = 3440x1440@144 0,0 primary
 - A monitor that appears in some mode but isn't listed in this one is **turned off**.
 - If a monitor of the mode isn't connected, the rest of the mode is still applied.
 
-The watcher reads the hotkeys only when it starts. After changing them, stop `ScreenLayout.exe`
-and start `ScreenLayout.exe watch` again. Changes to the monitor lines take effect on the next
-switch. [`layouts.example.ini`](layouts.example.ini) is a complete example.
+The watcher re-registers the hotkeys whenever `layouts.ini` is saved. Changes to the monitor
+lines take effect on the next switch. [`layouts.example.ini`](layouts.example.ini) is a complete example.
 
 ## Troubleshooting
 
@@ -158,8 +164,18 @@ and after, ending in `ok` or `MISMATCH`.
 
 | File | |
 |---|---|
-| `ScreenLayout.cs` | the whole tool |
-| `build.cmd` | builds `ScreenLayout.exe` with the Windows-bundled `csc.exe` |
+| `src/Program.cs` | command line: `set`, `watch`, `init`, ... |
+| `src/Config.cs` | `layouts.ini` parser |
+| `src/LayoutGenerator.cs` | writes `layouts.ini` from the connected monitors (`init`) |
+| `src/Core.cs` | applies a mode, and keeps the runtime files (`mode.txt`, log) |
+| `src/Ccd.cs` | Windows CCD API: which monitors are connected and on |
+| `src/Gdi.cs` | resolution, refresh rate, position and primary (`ChangeDisplaySettingsEx`) |
+| `src/Watcher.cs` | background watcher: hotkeys, re-applying after display changes |
+| `src/Toast.cs` | the on-screen toast |
+| `src/StartupShortcut.cs` | the Startup folder shortcut (`init`) |
+| `src/AssemblyInfo.cs` | version number |
+| `build.cmd` | builds `ScreenLayout.exe` from `src\*.cs` with the Windows-bundled `csc.exe` |
+| `release.cmd` | builds and packs `dist\ScreenLayout-<version>.zip` (+ `.sha256`) for a release |
 | `layouts.example.ini` | example configuration |
 | `layouts.ini`, `mode.txt`, `ScreenLayout.log` | per-PC files next to the exe, not in git |
 

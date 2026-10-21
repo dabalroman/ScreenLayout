@@ -3,4 +3,4 @@ ScreenLayout.log
 mode.txt
 # per PC: generate with `ScreenLayout.exe init`, see layouts.example.ini
 layouts.ini
-
+dist/

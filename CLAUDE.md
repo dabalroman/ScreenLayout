@@ -7,9 +7,14 @@ hotplug. See README.md for usage.
 
 ## Build / run
 
-- `build.cmd` - compiles with the .NET Framework 4 `csc.exe` that ships with Windows. No SDK, no
-  project file. **C# 5 only**: no string interpolation, `?.`, expression-bodied members, `out var`,
-  `nameof`.
+- `build.cmd` - compiles `src\*.cs` with the .NET Framework 4 `csc.exe` that ships with Windows.
+  No SDK, no project file. **C# 5 only**: no string interpolation, `?.`, expression-bodied members,
+  `out var`, `nameof`, file-scoped namespaces.
+- Code is in `src/`, one class per file, namespace `ScreenLayout` (README's Files table lists what
+  each one does). Keep new code in that shape rather than growing one file.
+- Release: bump the version in `src/AssemblyInfo.cs`, run `release.cmd` -> `dist\ScreenLayout-<v>.zip`
+  (exe, `layouts.example.ini`, README, LICENSE) and its `.sha256`; `dist/` is gitignored, the zip
+  is attached to a GitHub release by hand.
 - The watcher holds `ScreenLayout.exe` open: `Stop-Process -Name ScreenLayout` before building,
   then restart it with `ScreenLayout.exe watch`.
 - Per-PC files next to the exe (gitignored): `layouts.ini`, `mode.txt` (chosen mode),
@@ -22,6 +27,10 @@ hotplug. See README.md for usage.
 
 ## How it works / gotchas learned the hard way
 
+- **`init` is the whole setup**: `LayoutGenerator.Write` (only if `layouts.ini` is missing),
+  `StartupShortcut.Save` (`ScreenLayout watcher.lnk` in the Startup folder, rewritten each time
+  through late-bound WScript.Shell), starts `watch` (a no-op if one runs), opens Notepad. Don't
+  test it with `Start-Process -Wait`: that waits for the watcher it starts and hangs.
 - **Windows CCD database is keyed by the set of connected monitors.** Boot, logon and resume
   restore the entry for the current set. Applying a layout only writes the entry for the set
   connected at that moment - that's why layouts "reset" and why the watcher exists.
@@ -56,8 +65,8 @@ hotplug. See README.md for usage.
 watcher does so on start if it's missing): `[monitors]` gives display names (and the left-to-right order in the toast's
 diagram); each other section is a mode with `name`, `hotkey` (registered by the watcher, and
 shown in the toast) and `<ShortID> = WxH@Hz x,y [primary]` lines. A monitor listed in some mode
-but not in the current one is turned off. The watcher reads the hotkeys only at startup, so
-restart it after editing them. Optionally add a Start Menu shortcut in
+but not in the current one is turned off. The watcher re-registers the hotkeys when the file
+is saved (FileSystemWatcher, 1 s delay). Optionally add a Start Menu shortcut in
 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Screens\` (target `ScreenLayout.exe`, arguments
 `set <mode>`, icon `imageres.dll,104`), **without a hotkey**.
 
